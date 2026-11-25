@@ -41,12 +41,15 @@ for (const ch of REVIEW) {
 mkdirSync("/output", { recursive: true });
 writeFileSync("/output/entry.txt", REVIEW, "utf8");
 
-// Fail-fast read-back: confirm what landed on disk is byte-for-byte the
-// review we gated above. Catches a truncated/partial write or a path
-// collision (e.g. /output/entry.txt replaced by another entry's file)
-// instead of shipping a silently corrupted entry.
-const written = readFileSync("/output/entry.txt", "utf8");
-if (written !== REVIEW) {
+// Fail-fast read-back: read the raw bytes actually on disk (not a
+// decoded string) and decode them strictly, so invalid UTF-8 fails here
+// instead of silently becoming replacement characters. Byte-compare
+// against the review we gated above: catches a truncated/partial write
+// or a path collision (e.g. /output/entry.txt replaced by another
+// entry's file) instead of shipping a silently corrupted entry.
+const writtenBytes = readFileSync("/output/entry.txt");
+const written = new TextDecoder("utf-8", { fatal: true }).decode(writtenBytes);
+if (!writtenBytes.equals(Buffer.from(REVIEW, "utf8"))) {
   throw new Error(
     `Read-back mismatch: wrote ${REVIEW.length} chars, read back ${written.length} chars`,
   );
